@@ -1,0 +1,35 @@
+name: Синхронизация с Яндекс Диском
+
+on:
+  schedule:
+    - cron: "17 * * * *"   # раз в час
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Пробный запуск: только показать, что добавится"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # По расписанию работает, только когда в настройках репозитория переменная SYNC_ENABLED = true
+    if: github.event_name == 'workflow_dispatch' || vars.SYNC_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node sync/sync.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          YADISK_SOURCES: ${{ secrets.YADISK_SOURCES }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '' }}

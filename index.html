@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Шортсы к релизу</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Раскладка: шапка со сводкой, вкладки авторов, фильтры, список роликов строками; правка в окне. */
+:root{
+  --bg:#f4f1ee; --panel:#ffffff; --ink:#1d1a1c; --muted:#6f676b; --line:#e2dcd8;
+  --accent:#a3182a; --accent-ink:#ffffff; --soft:#f6e4e6;
+  --ok:#1f7a45; --ok-bg:#e1f2e7; --warn:#9a6200; --warn-bg:#fbeecd; --info:#235c9c; --info-bg:#e2edf9;
+  --display:"Unbounded","Trebuchet MS",sans-serif; --body:"Golos Text","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141113; --panel:#1e191c; --ink:#f1ecee; --muted:#a79da2; --line:#342c30;
+  --accent:#e2485c; --accent-ink:#17090c; --soft:#3a1a20;
+  --ok:#62cf8d; --ok-bg:#16301f; --warn:#e9b44c; --warn-bg:#35280d; --info:#7db4f0; --info-bg:#14263b; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);padding:20px 16px 60px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;justify-content:space-between}
+h1{font:700 26px/1.1 var(--display);margin:0;letter-spacing:-.5px;text-wrap:balance}
+.sub{color:var(--muted);font-size:14px;margin-top:4px}
+button,input,select,textarea{font:inherit;color:inherit}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn.danger{color:var(--accent)}
+.btn.done{background:var(--ok-bg);border-color:var(--ok);color:var(--ok);font-weight:600}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer;text-align:left}
+.tile b{display:block;font:700 22px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.tile span{color:var(--muted);font-size:13px}
+.tile.on{border-color:var(--accent);background:var(--soft)}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 14px;cursor:pointer}
+.tab i{font-style:normal;color:var(--muted);margin-left:6px;font-variant-numeric:tabular-nums}
+.tab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)} .tab.on i{color:inherit;opacity:.7}
+.tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.tools input[type=search],.tools select{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 12px}
+.tools input[type=search]{flex:1;min-width:200px}
+.banner{border-radius:10px;padding:10px 14px;background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn)}
+.banner.info{background:var(--info-bg);color:var(--info);border-color:var(--info)}
+.login{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:420px;margin:30px auto;display:flex;flex-direction:column;gap:12px}
+.login h2{margin:0;font:700 18px/1.2 var(--display)}
+.login p{margin:0;color:var(--muted);font-size:14px}
+.login input{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:10px 12px;width:100%}
+.login .err{color:var(--accent);font-size:14px;min-height:20px}
+.list{display:flex;flex-direction:column;gap:8px}
+.row{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:start}
+.row.s-wait{border-left-color:var(--warn)} .row.s-plan{border-left-color:var(--info)} .row.s-out{border-left-color:var(--ok)}
+.row h3{margin:0;font:600 16px/1.3 var(--body);overflow-wrap:anywhere}
+.row h3.empty{color:var(--muted);font-weight:400;font-style:italic}
+.meta{display:flex;flex-wrap:wrap;gap:6px 12px;color:var(--muted);font-size:13px;margin-top:4px}
+.meta .file{font-family:ui-monospace,Consolas,monospace;color:var(--ink)}
+.desc{color:var(--muted);font-size:14px;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.note{margin-top:6px;font-size:13px;color:var(--warn);font-weight:600}
+.side{display:flex;flex-direction:column;gap:8px;align-items:flex-end;min-width:210px}
+.pills{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.pill{border:1px solid transparent;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600;white-space:nowrap}
+button.pill{cursor:pointer}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.info{background:var(--info-bg);color:var(--info)}
+.pill.off{background:transparent;border-color:var(--line);color:var(--muted);font-weight:500}
+.acts{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.empty-state{padding:36px 16px;text-align:center;color:var(--muted);background:var(--panel);border:1px dashed var(--line);border-radius:10px}
+details.help{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+details.help summary{cursor:pointer;font-weight:600}
+details.help ol{margin:10px 0 4px;padding-left:22px;max-width:70ch} details.help li{margin:4px 0}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:0;width:min(640px,calc(100vw - 24px));max-height:calc(100vh - 24px)}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+form.ed{display:flex;flex-direction:column;gap:12px;padding:18px}
+form.ed h2{margin:0;font:700 18px/1.2 var(--display)}
+.f{display:flex;flex-direction:column;gap:4px} .f label{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.f input,.f select,.f textarea{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;width:100%}
+.f textarea{min-height:120px;resize:vertical}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.checks{display:flex;flex-wrap:wrap;gap:8px 20px} .checks label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.checks input{width:18px;height:18px;accent-color:var(--accent)}
+.foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;margin-top:4px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;display:flex;gap:12px;align-items:center;max-width:calc(100vw - 24px)}
+.toast.show{opacity:1;pointer-events:auto}
+.toast button{background:none;border:0;color:inherit;font-weight:600;text-decoration:underline;cursor:pointer;padding:0}
+[hidden]{display:none!important}
+@media (max-width:720px){.tiles{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}.side{align-items:flex-start;min-width:0}.pills,.acts{justify-content:flex-start}.grid2{grid-template-columns:1fr}h1{font-size:21px}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>Шортсы к релизу</h1><div class="sub" id="sub">Круг Мастеров · общая таблица команды</div></div>
+    <span>
+      <button class="btn" id="logout" type="button" hidden>Выйти</button>
+      <button class="btn primary" id="add" type="button">+ Новый ролик</button>
+    </span>
+  </header>
+  <div id="banner"></div>
+
+  <form class="login" id="login" hidden>
+    <h2>Вход для команды</h2>
+    <p>Таблица закрыта общим паролем. Спроси его у Алексея, вводить нужно один раз на устройство.</p>
+    <input type="password" id="pw" placeholder="Пароль команды" autocomplete="current-password" aria-label="Пароль команды">
+    <div class="err" id="loginErr" role="alert"></div>
+    <button class="btn primary" type="submit" id="loginBtn">Войти</button>
+  </form>
+
+  <div id="app" class="wrap">
+    <div class="tiles" id="tiles"></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="tools">
+      <input type="search" id="q" placeholder="Поиск по файлу, названию, описанию" aria-label="Поиск">
+      <select id="sort" aria-label="Сортировка">
+        <option value="todo">Сначала без даты релиза</option>
+        <option value="release">По дате релиза, новые сверху</option>
+        <option value="added">По дате добавления, новые сверху</option>
+      </select>
+    </div>
+    <div class="list" id="list"></div>
+    <details class="help">
+      <summary>Как готовить ролик к релизу</summary>
+      <ol>
+        <li><b>Согласование.</b> Смонтированный ролик согласовать с Алексом: идёт ли он в релиз.</li>
+        <li><b>Превью.</b> Сделать превью (необязательно). Если его не будет, сделает монтажёр Саша.</li>
+        <li><b>Встраивание.</b> Добавить превью в самое начало ролика, длительность 0,01 секунды. Если превью делал Саша, он встроит сам.</li>
+        <li><b>Загрузка.</b> Готовый ролик обязательно загрузить в свою папку на Яндекс Диске, каталог «ПРИНЯТО К РЕЛИЗУ». В течение часа он сам появится в этой таблице.</li>
+        <li><b>Запись сюда.</b> Открыть появившуюся строку и заполнить название и описание. Если строки нет, добавить кнопкой «Новый ролик».</li>
+        <li><b>Релиз.</b> Когда ролик выложен, нажать «Выложил» в его строке: дата релиза поставится сегодняшняя.</li>
+      </ol>
+    </details>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form class="ed" id="form" method="dialog">
+    <h2 id="dlgTitle">Ролик</h2>
+    <div class="grid2">
+      <div class="f"><label for="fAuthor">Автор</label><select id="fAuthor"></select></div>
+      <div class="f"><label for="fFile">Название файла на Яндекс Диске</label><input id="fFile" autocomplete="off"></div>
+    </div>
+    <div class="f"><label for="fTitle">Название для соцсетей <button class="btn small" type="button" data-copy="fTitle">Копировать</button></label><input id="fTitle" autocomplete="off"></div>
+    <div class="f"><label for="fDesc">Описание <button class="btn small" type="button" data-copy="fDesc">Копировать</button></label><textarea id="fDesc"></textarea></div>
+    <div class="checks">
+      <label><input type="checkbox" id="fReady"> Превью готово</label>
+      <label><input type="checkbox" id="fEmb"> Превью встроено в ролик</label>
+    </div>
+    <div class="grid2">
+      <div class="f"><label for="fAdded">Дата добавления к релизу</label><input type="date" id="fAdded"></div>
+      <div class="f"><label for="fRelease">Дата релиза (пусто - ещё не выложен)</label><input type="date" id="fRelease"></div>
+    </div>
+    <div class="f"><label for="fNote">Заметка</label><input id="fNote" autocomplete="off" placeholder="Например: битый файл на диске"></div>
+    <div class="foot">
+      <span><button class="btn danger" type="button" id="del">Удалить</button> <button class="btn danger" type="button" id="delYes" hidden>Точно удалить</button></span>
+      <span><button class="btn" type="button" id="cancel">Отмена</button> <button class="btn primary" type="submit" id="save">Сохранить</button></span>
+    </div>
+  </form>
+</dialog>
+<div class="toast" id="toast" role="status"><span id="toastText"></span><button type="button" id="toastUndo" hidden>Отменить</button></div>
+
+<script src="config.js"></script>
+<script>
+const AUTHORS=["Леша","Миша","Саша","Лера","Алекс","Ратибор"];
+const CFG=window.SHORTS_CONFIG||{};
+const $=(id)=>document.getElementById(id);
+const S={rows:[],author:"Все",status:"all",q:"",sort:"todo",canWrite:false,loaded:false,seed:null,editing:null,busy:0};
+try{const p=JSON.parse(localStorage.getItem("shorts-ui")||"{}");if(p.author)S.author=p.author;if(p.sort)S.sort=p.sort}catch(e){}
+const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+const fmt=(s)=>{if(!s)return"";const[y,m,d]=s.split("-");return d+"."+m+"."+y};
+const status=(r)=>!r.release?"wait":(r.release>today()?"plan":"out");
+const ST={wait:["Ждёт релиза","warn"],plan:["Запланирован","info"],out:["Вышел","ok"]};
+function toast(t,undo){const e=$("toast");$("toastText").textContent=t;const u=$("toastUndo");u.hidden=!undo;u.onclick=undo?()=>{e.classList.remove("show");undo()}:null;
+  e.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("show"),undo?6000:1800)}
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+
+/* ---- база: Supabase через обычный fetch, без библиотек ---- */
+const API={
+  ready:!!(CFG.url&&CFG.anonKey),sess:null,refreshing:null,
+  load(){try{this.sess=JSON.parse(localStorage.getItem("shorts-auth")||"null")}catch(e){this.sess=null}},
+  keep(){try{if(this.sess)localStorage.setItem("shorts-auth",JSON.stringify(this.sess));else localStorage.removeItem("shorts-auth")}catch(e){}},
+  async auth(grant,body){
+    const r=await fetch(CFG.url+"/auth/v1/token?grant_type="+grant,{method:"POST",headers:{apikey:CFG.anonKey,"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if(!r.ok){const e=new Error("auth");e.status=r.status;throw e}
+    const j=await r.json();this.sess={access:j.access_token,refresh:j.refresh_token,exp:Date.now()+(j.expires_in||3600)*1000};this.keep()},
+  login(pw){return this.auth("password",{email:CFG.teamEmail,password:pw})},
+  logout(){this.sess=null;this.keep()},
+  async token(){
+    if(!this.sess)throw needLogin();
+    if(Date.now()>this.sess.exp-60000){
+      if(!this.refreshing)this.refreshing=this.auth("refresh_token",{refresh_token:this.sess.refresh}).finally(()=>{this.refreshing=null});
+      try{await this.refreshing}catch(e){if(e.status>=400&&e.status<500){this.logout();throw needLogin()}throw e}}
+    return this.sess.access},
+  async req(method,path,body,prefer){
+    const t=await this.token();
+    const h={apikey:CFG.anonKey,Authorization:"Bearer "+t,"Content-Type":"application/json"};if(prefer)h.Prefer=prefer;
+    const r=await fetch(CFG.url+"/rest/v1/"+path,{method,headers:h,body:body==null?undefined:JSON.stringify(body)});
+    if(r.status===401){this.logout();throw needLogin()}
+    if(!r.ok){const e=new Error("http "+r.status);e.status=r.status;throw e}
+    const txt=await r.text();return txt?JSON.parse(txt):null}
+};
+function needLogin(){const e=new Error("login");e.login=true;return e}
+const fromDb=(x)=>({id:x.id,author:x.author||"",file:x.file||"",title:x.title||"",desc:x.descr||"",added:x.added||"",release:x.release||"",note:x.note||"",previewReady:!!x.preview_ready,previewEmbedded:!!x.preview_embedded,order:x.ord||0,disk:x.disk_path||""});
+const MAP={author:"author",file:"file",title:"title",desc:"descr",added:"added",release:"release",note:"note",previewReady:"preview_ready",previewEmbedded:"preview_embedded",order:"ord"};
+function toDb(p){const o={};for(const k in p){if(!MAP[k])continue;let v=p[k];if((k==="added"||k==="release")&&!v)v=null;o[MAP[k]]=v}return o}
+
+function scoped(){return S.rows.filter(r=>S.author==="Все"||r.author===S.author)}
+function visible(){
+  const q=S.q.trim().toLowerCase();
+  let a=scoped().filter(r=>{
+    if(S.status==="nopreview"){if(r.previewReady)return false}
+    else if(S.status!=="all"&&status(r)!==S.status)return false;
+    if(q&&!(r.file+" "+r.title+" "+r.desc+" "+r.note).toLowerCase().includes(q))return false;
+    return true});
+  const key={todo:(x,y)=>(!!x.release-!!y.release)||(y.added||"").localeCompare(x.added||"")||(y.order||0)-(x.order||0),
+    release:(x,y)=>(y.release||"").localeCompare(x.release||""),
+    added:(x,y)=>(y.added||"").localeCompare(x.added||"")}[S.sort];
+  return a.sort(key);
+}
+function render(){
+  const sc=scoped(),cnt={all:sc.length,wait:0,plan:0,out:0,nopreview:0};
+  sc.forEach(r=>{cnt[status(r)]++;if(!r.previewReady)cnt.nopreview++});
+  const tiles=$("tiles");tiles.replaceChildren();
+  [["all","Всего роликов"],["wait","Ждут релиза"],["plan","Запланированы"],["out","Вышли"]].forEach(([k,l])=>{
+    const b=el("button","tile"+(S.status===k?" on":""));b.type="button";b.append(el("b",null,cnt[k]),el("span",null,l));
+    b.onclick=()=>{S.status=S.status===k?"all":k;render()};tiles.append(b)});
+  const tabs=$("tabs");tabs.replaceChildren();
+  ["Все",...AUTHORS].forEach(a=>{const n=a==="Все"?S.rows.length:S.rows.filter(r=>r.author===a).length;
+    const b=el("button","tab"+(S.author===a?" on":""),a);b.type="button";b.append(el("i",null,n));
+    b.onclick=()=>{S.author=a;saveUi();render()};tabs.append(b)});
+  const np=el("button","tab"+(S.status==="nopreview"?" on":""),"Без превью");np.type="button";np.append(el("i",null,cnt.nopreview));
+  np.onclick=()=>{S.status=S.status==="nopreview"?"all":"nopreview";render()};tabs.append(np);
+
+  const list=$("list");list.replaceChildren();const rows=visible();
+  if(!rows.length){
+    const e=el("div","empty-state");
+    if(!S.loaded)e.textContent="Загружаю ролики...";
+    else if(!S.rows.length){e.append(el("div",null,"Здесь пока нет ни одного ролика."));
+      if(S.canWrite&&S.seed&&S.seed.length){const b=el("button","btn primary","Перенести ролики из старой таблицы ("+S.seed.length+")");b.type="button";b.style.marginTop="12px";b.onclick=importSeed;e.append(b)}}
+    else e.textContent="По этому фильтру ничего нет.";
+    list.append(e);return}
+  rows.forEach(r=>list.append(rowEl(r)));
+}
+function rowEl(r){
+  const st=status(r),row=el("article","row s-"+st),main=el("div"),side=el("div","side");
+  main.append(el("h3",r.title?null:"empty",r.title||"Без названия"));
+  const meta=el("div","meta");
+  if(S.author==="Все")meta.append(el("span",null,r.author||"автор не указан"));
+  if(r.file)meta.append(el("span","file",r.file));
+  if(r.added)meta.append(el("span",null,"добавлен "+fmt(r.added)));
+  main.append(meta);
+  if(r.desc)main.append(el("div","desc",r.desc));
+  if(r.note)main.append(el("div","note",r.note));
+  const pills=el("div","pills");
+  pills.append(el("span","pill "+ST[st][1],st==="wait"?ST[st][0]:ST[st][0]+" "+fmt(r.release)));
+  pills.append(toggle(r,"previewReady","Превью готово","Нет превью"),toggle(r,"previewEmbedded","Встроено","Не встроено"));
+  const acts=el("div","acts");
+  if(st!=="out"){const pub=el("button","btn small done","Выложил");pub.type="button";pub.disabled=!S.canWrite;
+    pub.title="Отметить, что ролик выложен сегодня";pub.onclick=()=>publish(r);acts.append(pub)}
+  const c1=el("button","btn small","Название");c1.type="button";c1.title="Скопировать название";c1.onclick=()=>copy(r.title,"Название скопировано");
+  const c2=el("button","btn small","Описание");c2.type="button";c2.title="Скопировать описание";c2.onclick=()=>copy(r.desc,"Описание скопировано");
+  const ed=el("button","btn small","Открыть");ed.type="button";ed.onclick=()=>openDlg(r);
+  if(r.title)acts.append(c1);if(r.desc)acts.append(c2);acts.append(ed);
+  side.append(pills,acts);row.append(main,side);return row}
+function toggle(r,field,on,off){
+  const b=el("button","pill "+(r[field]?"ok":"off"),r[field]?on:off);b.type="button";b.disabled=!S.canWrite;
+  b.title="Нажми, чтобы переключить";b.onclick=()=>write(r.id,{[field]:!r[field]});return b}
+function publish(r){
+  const prev=r.release;
+  write(r.id,{release:today()}).then(ok=>{if(ok)toast("Отмечено: выложен "+fmt(today()),()=>write(r.id,{release:prev}))})}
+async function copy(text,msg){try{await navigator.clipboard.writeText(text||"");toast(msg)}catch(e){toast("Не получилось скопировать, выдели текст в окне ролика")}}
+function saveUi(){try{localStorage.setItem("shorts-ui",JSON.stringify({author:S.author,sort:S.sort}))}catch(e){}}
+
+/* ---- окно правки ---- */
+function openDlg(r){
+  S.editing=r?r.id:null;$("dlgTitle").textContent=r?"Ролик":"Новый ролик";
+  $("fAuthor").value=r?r.author:(S.author==="Все"?AUTHORS[0]:S.author);
+  $("fFile").value=r?r.file:"";$("fTitle").value=r?r.title:"";$("fDesc").value=r?r.desc:"";
+  $("fReady").checked=r?!!r.previewReady:false;$("fEmb").checked=r?!!r.previewEmbedded:false;
+  $("fAdded").value=r?r.added:today();$("fRelease").value=r?r.release:"";$("fNote").value=r?r.note:"";
+  $("del").hidden=!r||!S.canWrite;$("delYes").hidden=true;$("save").disabled=!S.canWrite;$("dlg").showModal()}
+$("add").onclick=()=>openDlg(null);
+$("cancel").onclick=()=>$("dlg").close();
+$("del").onclick=()=>{$("delYes").hidden=false};
+$("delYes").onclick=async()=>{const id=S.editing;$("dlg").close();if(!id||!S.canWrite)return;
+  try{await API.req("PATCH","shorts?id=eq."+id,{deleted:true});S.rows=S.rows.filter(r=>r.id!==id);render();
+    toast("Ролик удалён",async()=>{try{await API.req("PATCH","shorts?id=eq."+id,{deleted:false});await load()}catch(e){fail(e)}})}catch(e){fail(e)}};
+document.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>copy($(b.dataset.copy).value,"Скопировано"));
+$("form").addEventListener("submit",async(ev)=>{
+  ev.preventDefault();if(!S.canWrite)return;
+  const data={author:$("fAuthor").value,file:$("fFile").value.trim(),title:$("fTitle").value.trim(),desc:$("fDesc").value.trim(),
+    previewReady:$("fReady").checked,previewEmbedded:$("fEmb").checked,added:$("fAdded").value,release:$("fRelease").value,note:$("fNote").value.trim()};
+  $("dlg").close();
+  try{
+    if(S.editing)await API.req("PATCH","shorts?id=eq."+S.editing,toDb(data));
+    else{data.order=Date.now();await API.req("POST","shorts",toDb(data))}
+    await load();toast("Сохранено")}catch(e){fail(e)}});
+async function write(id,patch){
+  if(!S.canWrite)return false;
+  const r=S.rows.find(x=>x.id===id),old=r?{...r}:null;if(r){Object.assign(r,patch);render()}
+  S.busy++;
+  try{await API.req("PATCH","shorts?id=eq."+id,toDb(patch));return true}
+  catch(e){if(r&&old){Object.assign(r,old);render()}fail(e);return false}
+  finally{S.busy--}}
+function fail(e){
+  if(e&&e.login){showLogin("Сессия закончилась, введи пароль ещё раз.");return}
+  toast("Не сохранилось, проверь интернет и попробуй ещё раз")}
+function banner(text,kind){const b=$("banner");b.replaceChildren();if(text)b.append(el("div","banner"+(kind==="info"?" info":""),text))}
+
+/* ---- перенос из старой таблицы ---- */
+async function importSeed(){
+  if(!S.canWrite||!S.seed)return;
+  banner("Переношу ролики из старой таблицы...","info");
+  try{await API.req("POST","shorts",S.seed.map(toDb));banner("");await load();toast("Перенесено роликов: "+S.seed.length)}
+  catch(e){banner("Перенос не удался, ничего не добавлено. Попробуй ещё раз.","warn");if(e&&e.login)fail(e)}}
+
+/* ---- загрузка и вход ---- */
+async function load(){
+  try{
+    const data=await API.req("GET","shorts?select=*&deleted=is.false&order=ord.asc&limit=2000");
+    if(S.busy)return;
+    S.rows=data.map(fromDb);S.loaded=true;S.canWrite=true;if(load.lost){load.lost=false;banner("")}render()}
+  catch(e){
+    if(e&&e.login){showLogin(API.sess===null&&S.loaded?"Сессия закончилась, введи пароль ещё раз.":"");return}
+    load.lost=true;banner("Нет связи с базой. Пробую снова, страницу перезагружать не нужно.","warn");if(!S.loaded)render()}}
+function showLogin(msg){$("login").hidden=false;$("app").hidden=true;$("add").hidden=true;$("logout").hidden=true;$("loginErr").textContent=msg||"";S.canWrite=false;$("pw").focus()}
+function showApp(){$("login").hidden=true;$("app").hidden=false;$("add").hidden=false;$("logout").hidden=!API.ready}
+$("login").addEventListener("submit",async(ev)=>{
+  ev.preventDefault();const pw=$("pw").value;if(!pw)return;
+  $("loginBtn").disabled=true;$("loginErr").textContent="";
+  try{await API.login(pw);$("pw").value="";showApp();S.loaded=false;render();await load()}
+  catch(e){$("loginErr").textContent=e.status===400||e.status===401?"Пароль не подошёл.":"Не получилось связаться с базой. Проверь интернет."}
+  finally{$("loginBtn").disabled=false}});
+$("logout").onclick=()=>{API.logout();S.rows=[];S.loaded=false;showLogin("")};
+
+/* ---- запуск ---- */
+AUTHORS.forEach(a=>$("fAuthor").append(new Option(a,a)));
+$("sort").value=S.sort;
+$("q").addEventListener("input",e=>{S.q=e.target.value;render()});
+$("sort").addEventListener("change",e=>{S.sort=e.target.value;saveUi();render()});
+render();
+const seedReady=fetch("seed.json").then(r=>r.ok?r.json():null).then(j=>{if(Array.isArray(j))S.seed=j}).catch(()=>{});
+(async()=>{
+  if(!API.ready){
+    await seedReady;S.rows=(S.seed||[]).map((x,i)=>({id:"seed"+i,...x}));S.loaded=true;S.canWrite=false;$("add").disabled=true;
+    banner("База ещё не подключена: показываю копию старой таблицы только для чтения.","warn");render();return}
+  API.load();
+  if(!API.sess){showLogin("");return}
+  showApp();await load();await seedReady;if(S.loaded&&!S.rows.length)render();
+})();
+/* Чужие правки подтягиваются раз в 20 секунд и при возврате на вкладку. */
+setInterval(()=>{if(API.ready&&API.sess&&!document.hidden&&!$("dlg").open)load()},20000);
+document.addEventListener("visibilitychange",()=>{if(API.ready&&API.sess&&!document.hidden&&!$("dlg").open)load()});
+</script>
+</body>
+</html>
