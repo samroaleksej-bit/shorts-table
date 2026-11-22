@@ -10,6 +10,8 @@
 //   DRY_RUN=1             только показать, что было бы сделано
 
 const AUTHORS = ["Леша", "Миша", "Саша", "Лера", "Алекс", "Ратибор"];
+// Папка названа не именем автора из таблицы: чьи это ролики.
+const FOLDER_OWNERS = { "никита": "Лера" };
 const RELEASE_DIR = "принято к релизу";
 const VIDEO_EXT = /\.(mp4|mov|m4v|mkv|avi|webm)$/i;
 const MAX_DEPTH = 6;
@@ -48,8 +50,9 @@ async function listDir(publicKey, path) {
 // Автор: явно заданный у ссылки, иначе имя автора в любой части пути.
 function authorOf(path, fallback) {
   if (fallback) return fallback;
-  const parts = path.split("/").map(norm);
-  for (const a of AUTHORS) if (parts.some((p) => p.split(/[^a-zа-я0-9]+/i).includes(norm(a)))) return a;
+  const words = norm(path).split(/[^a-zа-я0-9]+/i).filter(Boolean);
+  for (const [word, owner] of Object.entries(FOLDER_OWNERS)) if (words.some((w) => w.startsWith(word))) return owner;
+  for (const a of AUTHORS) if (words.some((w) => w.startsWith(norm(a)))) return a; // «Шортсы Ратибора» -> Ратибор
   return "";
 }
 
@@ -64,6 +67,7 @@ async function collect(source, n) {
         found.push({
           key: `${n}:${it.path}`,
           file: stem(it.name),
+          folder: path.split("/").pop().replace(/^d+.s*/, ""), // «3. Улун» -> «Улун»
           author: authorOf(it.path, source.author),
           added: String(it.created || it.modified || new Date().toISOString()).slice(0, 10),
         });
@@ -85,21 +89,23 @@ async function db(method, path, body, prefer) {
 
 async function main() {
   const sources = parseSources(YADISK_SOURCES);
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) throw new Error("Не заданы SUPABASE_URL и SUPABASE_SERVICE_KEY");
+  const noDb = !SUPABASE_URL || !SUPABASE_SERVICE_KEY;
+  if (noDb && !DRY) throw new Error("Не заданы SUPABASE_URL и SUPABASE_SERVICE_KEY");
   if (!sources.length) throw new Error("Не задан YADISK_SOURCES - нет ни одной ссылки на папку");
 
   const files = [];
   for (let i = 0; i < sources.length; i++) files.push(...(await collect(sources[i], i + 1)));
   console.log(`На диске в «ПРИНЯТО К РЕЛИЗУ» найдено видео: ${files.length}`);
 
-  const rows = await db("GET", "shorts?select=id,author,file,disk_path&limit=5000");
+  if (noDb) console.log("База не подключена: сравниваю с пустой таблицей.");
+  const rows = noDb ? [] : await db("GET", "shorts?select=id,author,file,disk_path&limit=5000");
   const known = new Set(rows.map((r) => r.disk_path).filter(Boolean));
   const free = rows.filter((r) => !r.disk_path); // строки, заведённые руками или из старой таблицы
 
   const link = [], add = [];
   for (const f of files) {
     if (known.has(f.key)) continue;
-    const i = free.findIndex((r) => norm(r.file) === norm(f.file) && (!r.author || !f.author || r.author === f.author));
+    const i = free.findIndex((r) => (norm(r.file) === norm(f.file) || norm(r.file) === norm(f.folder)) && (!r.author || !f.author || r.author === f.author));
     if (i >= 0) link.push({ id: free.splice(i, 1)[0].id, f });
     else add.push(f);
     known.add(f.key);

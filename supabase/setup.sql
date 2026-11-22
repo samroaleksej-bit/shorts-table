@@ -31,6 +31,11 @@ create trigger shorts_touch before update on public.shorts
 -- Доступ только после входа общим пользователем команды. Без пароля таблицу не видно.
 alter table public.shorts enable row level security;
 
+-- В новых проектах Supabase права на таблицу сами не выдаются.
+-- Гостю (anon) не даём ничего, вошедшей команде - читать, добавлять и править.
+grant select, insert, update on public.shorts to authenticated;
+grant all on public.shorts to service_role;
+
 drop policy if exists "team full access" on public.shorts;
 create policy "team full access" on public.shorts
   for all to authenticated using (true) with check (true);
