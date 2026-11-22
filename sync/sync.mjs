@@ -9,10 +9,11 @@
 //                         Можно указать автора: "https://disk.yandex.ru/d/xxxx = Лера"
 //   DRY_RUN=1             только показать, что было бы сделано
 
-const AUTHORS = ["Леша", "Миша", "Саша", "Лера", "Алекс", "Ратибор"];
+const AUTHORS = ["Леша", "Миша", "Саша", "Лера", "Алекс", "Ратибор", "Даня"];
 // Папка названа не именем автора из таблицы: чьи это ролики.
 const FOLDER_OWNERS = { "никита": "Лера" };
-const RELEASE_DIR = "принято к релизу";
+// Каталог с принятыми роликами: «Принято к релизу», «Принят», «Принято», «Принял».
+const isReleaseDir = (name) => /^(принят|принял)/.test(norm(name));
 const VIDEO_EXT = /\.(mp4|mov|m4v|mkv|avi|webm)$/i;
 const MAX_DEPTH = 6;
 
@@ -61,13 +62,13 @@ async function collect(source, n) {
   async function walk(path, depth, inside) {
     for (const it of await listDir(source.url, path)) {
       if (it.type === "dir") {
-        const here = inside || norm(it.name) === RELEASE_DIR;
+        const here = inside || isReleaseDir(it.name);
         if (depth < MAX_DEPTH) await walk(it.path, depth + 1, here);
       } else if (inside && (it.media_type === "video" || VIDEO_EXT.test(it.name))) {
         found.push({
           key: `${n}:${it.path}`,
           file: stem(it.name),
-          folder: path.split("/").pop().replace(/^d+.s*/, ""), // «3. Улун» -> «Улун»
+          folder: path.split("/").pop().replace(/^\d+\.\s*/, ""), // «3. Улун» -> «Улун»
           author: authorOf(it.path, source.author),
           added: String(it.created || it.modified || new Date().toISOString()).slice(0, 10),
         });

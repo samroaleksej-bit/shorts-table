@@ -99,7 +99,7 @@ form.ed h2{margin:0;font:700 18px/1.2 var(--display)}
     <div><h1>Шортсы к релизу</h1><div class="sub" id="sub">Круг Мастеров · общая таблица команды</div></div>
     <span>
       <button class="btn" id="logout" type="button" hidden>Выйти</button>
-      <button class="btn primary" id="add" type="button">+ Новый ролик</button>
+      <button class="btn primary" id="sync" type="button" title="Найти на Яндекс Диске новые принятые ролики и добавить их в таблицу">Синхронизировать с диском</button>
     </span>
   </header>
   <div id="banner"></div>
@@ -130,8 +130,8 @@ form.ed h2{margin:0;font:700 18px/1.2 var(--display)}
         <li><b>Согласование.</b> Смонтированный ролик согласовать с Алексом: идёт ли он в релиз.</li>
         <li><b>Превью.</b> Сделать превью (необязательно). Если его не будет, сделает монтажёр Саша.</li>
         <li><b>Встраивание.</b> Добавить превью в самое начало ролика, длительность 0,01 секунды. Если превью делал Саша, он встроит сам.</li>
-        <li><b>Загрузка.</b> Готовый ролик обязательно загрузить в свою папку на Яндекс Диске, каталог «ПРИНЯТО К РЕЛИЗУ». В течение часа он сам появится в этой таблице.</li>
-        <li><b>Запись сюда.</b> Открыть появившуюся строку и заполнить название и описание. Если строки нет, добавить кнопкой «Новый ролик».</li>
+        <li><b>Загрузка.</b> Готовый ролик обязательно загрузить в свою папку на Яндекс Диске, каталог «Принято к релизу» (или «Принят»).</li>
+        <li><b>Запись сюда.</b> Нажать «Синхронизировать с диском»: ролик появится в таблице. Открыть его строку и заполнить название и описание.</li>
         <li><b>Релиз.</b> Когда ролик выложен, нажать «Выложил» в его строке: дата релиза поставится сегодняшняя.</li>
       </ol>
     </details>
@@ -166,7 +166,7 @@ form.ed h2{margin:0;font:700 18px/1.2 var(--display)}
 
 <script src="config.js"></script>
 <script>
-const AUTHORS=["Леша","Миша","Саша","Лера","Алекс","Ратибор"];
+const AUTHORS=["Леша","Миша","Саша","Лера","Алекс","Ратибор","Даня"];
 const CFG=window.SHORTS_CONFIG||{};
 const $=(id)=>document.getElementById(id);
 const S={rows:[],author:"Все",status:"all",q:"",sort:"todo",canWrite:false,loaded:false,seed:null,editing:null,busy:0};
@@ -284,7 +284,7 @@ function openDlg(r){
   $("fReady").checked=r?!!r.previewReady:false;$("fEmb").checked=r?!!r.previewEmbedded:false;
   $("fAdded").value=r?r.added:today();$("fRelease").value=r?r.release:"";$("fNote").value=r?r.note:"";
   $("del").hidden=!r||!S.canWrite;$("delYes").hidden=true;$("save").disabled=!S.canWrite;$("dlg").showModal()}
-$("add").onclick=()=>openDlg(null);
+$("sync").onclick=()=>syncDisk();
 $("cancel").onclick=()=>$("dlg").close();
 $("del").onclick=()=>{$("delYes").hidden=false};
 $("delYes").onclick=async()=>{const id=S.editing;$("dlg").close();if(!id||!S.canWrite)return;
@@ -319,6 +319,59 @@ async function importSeed(){
   try{await API.req("POST","shorts",S.seed.map(toDb));banner("");await load();toast("Перенесено роликов: "+S.seed.length)}
   catch(e){banner("Перенос не удался, ничего не добавлено. Попробуй ещё раз.","warn");if(e&&e.login)fail(e)}}
 
+/* ---- синхронизация с Яндекс Диском ---- */
+const FOLDER_OWNERS={"никита":"Лера"}; // папка названа не именем автора из таблицы
+const VIDEO_EXT=/\.(mp4|mov|m4v|mkv|avi|webm)$/i;
+const norm=(s)=>String(s||"").toLowerCase().replace(/ё/g,"е").replace(/\s+/g," ").trim();
+const isReleaseDir=(n)=>/^(принят|принял)/.test(norm(n)); // «Принято к релизу», «Принят»
+function authorOf(path,given){
+  if(given)return given;
+  const words=norm(path).split(/[^a-zа-я0-9]+/i).filter(Boolean);
+  for(const w in FOLDER_OWNERS)if(words.some(x=>x.startsWith(w)))return FOLDER_OWNERS[w];
+  for(const a of AUTHORS)if(words.some(x=>x.startsWith(norm(a))))return a;
+  return ""}
+async function diskList(key,path){
+  const items=[];
+  for(let off=0;;off+=200){
+    const u=new URL("https://cloud-api.yandex.net/v1/disk/public/resources");
+    u.searchParams.set("public_key",key);u.searchParams.set("path",path);u.searchParams.set("limit","200");u.searchParams.set("offset",String(off));
+    let r;try{r=await fetch(u)}catch(e){r=null}
+    if(!r||!r.ok){const e=new Error("disk");e.disk=true;throw e}
+    const page=((await r.json())._embedded||{}).items||[];items.push(...page);if(page.length<200)break}
+  return items}
+async function diskCollect(src,n){
+  const found=[];
+  async function walk(path,depth,inside){
+    for(const it of await diskList(src.url,path)){
+      if(it.type==="dir"){if(depth<6)await walk(it.path,depth+1,inside||isReleaseDir(it.name))}
+      else if(inside&&(it.media_type==="video"||VIDEO_EXT.test(it.name)))
+        found.push({key:n+":"+it.path,file:it.name.replace(/\.[^.]+$/,""),folder:path.split("/").pop().replace(/^\d+\.\s*/,""),
+          author:authorOf(it.path,src.author),added:String(it.created||it.modified||"").slice(0,10)||today()})}}
+  await walk("/",0,false);return found}
+async function syncDisk(){
+  if(!S.canWrite||syncDisk.on)return;syncDisk.on=true;$("sync").disabled=true;
+  try{
+    banner("Смотрю папки на Яндекс Диске, это займёт до минуты...","info");
+    const st=await API.req("GET","settings?key=eq.yadisk_sources&select=value");
+    const sources=String((st&&st[0]&&st[0].value)||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+      const i=l.indexOf("=",l.indexOf("://")+3);return i>0?{url:l.slice(0,i).trim(),author:l.slice(i+1).trim()}:{url:l,author:""}});
+    if(!sources.length){banner("Не задана ссылка на Яндекс Диск, синхронизировать не с чем.","warn");return}
+    const files=[];for(let i=0;i<sources.length;i++)files.push(...await diskCollect(sources[i],i+1));
+    const rows=await API.req("GET","shorts?select=id,author,file,disk_path&limit=5000");
+    const known=new Set(rows.map(r=>r.disk_path).filter(Boolean)),free=rows.filter(r=>!r.disk_path),link=[],add=[];
+    for(const f of files){
+      if(known.has(f.key))continue;known.add(f.key);
+      const i=free.findIndex(r=>(norm(r.file)===norm(f.file)||norm(r.file)===norm(f.folder))&&(!r.author||!f.author||r.author===f.author));
+      if(i>=0)link.push({id:free.splice(i,1)[0].id,key:f.key});else add.push(f)}
+    for(const l of link)await API.req("PATCH","shorts?id=eq."+l.id,{disk_path:l.key});
+    if(add.length){const now=Date.now();await API.req("POST","shorts",add.map((f,i)=>({author:f.author,file:f.file,added:f.added,ord:now+i,disk_path:f.key})))}
+    banner("");await load();
+    toast(add.length?"Добавлено с диска: "+add.length:"Новых роликов на диске нет")}
+  catch(e){
+    if(e&&e.login){banner("");fail(e)}
+    else banner(e&&e.disk?"Яндекс Диск не ответил. Попробуй ещё раз через минуту.":"Синхронизация не удалась: нет связи с базой. Попробуй ещё раз.","warn")}
+  finally{syncDisk.on=false;$("sync").disabled=!S.canWrite}}
+
 /* ---- загрузка и вход ---- */
 async function load(){
   try{
@@ -328,8 +381,8 @@ async function load(){
   catch(e){
     if(e&&e.login){showLogin(API.sess===null&&S.loaded?"Сессия закончилась, введи пароль ещё раз.":"");return}
     load.lost=true;banner("Нет связи с базой. Пробую снова, страницу перезагружать не нужно.","warn");if(!S.loaded)render()}}
-function showLogin(msg){$("login").hidden=false;$("app").hidden=true;$("add").hidden=true;$("logout").hidden=true;$("loginErr").textContent=msg||"";S.canWrite=false;$("pw").focus()}
-function showApp(){$("login").hidden=true;$("app").hidden=false;$("add").hidden=false;$("logout").hidden=!API.ready}
+function showLogin(msg){$("login").hidden=false;$("app").hidden=true;$("sync").hidden=true;$("logout").hidden=true;$("loginErr").textContent=msg||"";S.canWrite=false;$("pw").focus()}
+function showApp(){$("login").hidden=true;$("app").hidden=false;$("sync").hidden=false;$("logout").hidden=!API.ready}
 $("login").addEventListener("submit",async(ev)=>{
   ev.preventDefault();const pw=$("pw").value;if(!pw)return;
   $("loginBtn").disabled=true;$("loginErr").textContent="";
@@ -347,7 +400,7 @@ render();
 const seedReady=fetch("seed.json").then(r=>r.ok?r.json():null).then(j=>{if(Array.isArray(j))S.seed=j}).catch(()=>{});
 (async()=>{
   if(!API.ready){
-    await seedReady;S.rows=(S.seed||[]).map((x,i)=>({id:"seed"+i,...x}));S.loaded=true;S.canWrite=false;$("add").disabled=true;
+    await seedReady;S.rows=(S.seed||[]).map((x,i)=>({id:"seed"+i,...x}));S.loaded=true;S.canWrite=false;$("sync").disabled=true;
     banner("База ещё не подключена: показываю копию старой таблицы только для чтения.","warn");render();return}
   API.load();
   if(!API.sess){showLogin("");return}

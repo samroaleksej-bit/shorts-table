@@ -39,3 +39,20 @@ grant all on public.shorts to service_role;
 drop policy if exists "team full access" on public.shorts;
 create policy "team full access" on public.shorts
   for all to authenticated using (true) with check (true);
+
+-- Настройки: ссылки на публичные папки Яндекс Диска для кнопки «Синхронизировать с диском».
+-- Лежат в базе, а не в коде, чтобы ссылку на диск не было видно в публичном репозитории.
+create table if not exists public.settings (
+  key   text primary key,
+  value text not null default ''
+);
+alter table public.settings enable row level security;
+drop policy if exists "team reads settings" on public.settings;
+create policy "team reads settings" on public.settings
+  for select to authenticated using (true);
+grant select on public.settings to authenticated;
+grant all on public.settings to service_role;
+
+-- Ссылки, по одной в строке. Автора можно указать явно: "https://disk.yandex.ru/d/xxxx = Лера"
+-- insert into public.settings (key, value) values ('yadisk_sources', 'https://disk.yandex.ru/d/xxxx')
+--   on conflict (key) do update set value = excluded.value;
