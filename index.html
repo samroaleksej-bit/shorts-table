@@ -123,6 +123,7 @@ form.ed h2{margin:0;font:700 18px/1.2 var(--display)}
         <option value="added">По дате добавления, новые сверху</option>
       </select>
     </div>
+    <div class="sub" id="count" role="status"></div>
     <div class="list" id="list"></div>
     <details class="help">
       <summary>Как готовить ролик к релизу</summary>
@@ -237,6 +238,11 @@ function render(){
   np.onclick=()=>{S.status=S.status==="nopreview"?"all":"nopreview";render()};tabs.append(np);
 
   const list=$("list");list.replaceChildren();const rows=visible();
+  const what={all:"",wait:"ждут релиза",plan:"запланированы",out:"вышли",nopreview:"без превью"}[S.status];
+  const filtered=S.status!=="all"||S.author!=="Все"||S.q.trim();
+  $("count").textContent=!S.loaded||!S.rows.length?"":filtered
+    ?"Показано "+rows.length+" из "+S.rows.length+([S.author!=="Все"?S.author:"",what].filter(Boolean).length?": "+[S.author!=="Все"?S.author:"",what].filter(Boolean).join(", "):"")
+    :"Показаны все ролики: "+rows.length;
   if(!rows.length){
     const e=el("div","empty-state");
     if(!S.loaded)e.textContent="Загружаю ролики...";
