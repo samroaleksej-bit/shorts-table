@@ -7,6 +7,8 @@
 //   SUPABASE_SERVICE_KEY  секретный ключ (service_role / secret) - только в секретах GitHub
 //   YADISK_SOURCES        публичные ссылки на папки, по одной в строке.
 //                         Можно указать автора: "https://disk.yandex.ru/d/xxxx = Лера"
+//   YADISK_ALL_SOURCES    то же, но из этих папок берутся ВСЕ видео, без каталога
+//                         «Принято к релизу» (папка, куда ролики кладёт телеграм-бот)
 //   DRY_RUN=1             только показать, что было бы сделано
 
 const AUTHORS = ["Леша", "Миша", "Саша", "Лера", "Алекс", "Ратибор", "Даня"];
@@ -17,7 +19,7 @@ const isReleaseDir = (name) => /^(принят|принял)/.test(norm(name));
 const VIDEO_EXT = /\.(mp4|mov|m4v|mkv|avi|webm)$/i;
 const MAX_DEPTH = 6;
 
-const { SUPABASE_URL, SUPABASE_SERVICE_KEY, YADISK_SOURCES } = process.env;
+const { SUPABASE_URL, SUPABASE_SERVICE_KEY, YADISK_SOURCES, YADISK_ALL_SOURCES } = process.env;
 const DRY = /^(1|true|yes)$/i.test(process.env.DRY_RUN || "");
 
 const norm = (s) => String(s || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
@@ -57,7 +59,7 @@ function authorOf(path, fallback) {
   return "";
 }
 
-async function collect(source, n) {
+async function collect(source, n, all = false) {
   const found = [];
   async function walk(path, depth, inside) {
     for (const it of await listDir(source.url, path)) {
@@ -68,14 +70,14 @@ async function collect(source, n) {
         found.push({
           key: `${n}:${it.path}`,
           file: stem(it.name),
-          folder: path.split("/").pop().replace(/^\d+\.\s*/, ""), // «3. Улун» -> «Улун»
+          folder: all ? "" : path.split("/").pop().replace(/^\d+\.\s*/, ""), // «3. Улун» -> «Улун»
           author: authorOf(it.path, source.author),
           added: String(it.created || it.modified || new Date().toISOString()).slice(0, 10),
         });
       }
     }
   }
-  await walk("/", 0, false);
+  await walk("/", 0, all);
   return found;
 }
 
@@ -92,11 +94,15 @@ async function main() {
   const sources = parseSources(YADISK_SOURCES);
   const noDb = !SUPABASE_URL || !SUPABASE_SERVICE_KEY;
   if (noDb && !DRY) throw new Error("Не заданы SUPABASE_URL и SUPABASE_SERVICE_KEY");
-  if (!sources.length) throw new Error("Не задан YADISK_SOURCES - нет ни одной ссылки на папку");
+  const allSources = parseSources(YADISK_ALL_SOURCES);
+  if (!sources.length && !allSources.length) throw new Error("Не задан YADISK_SOURCES - нет ни одной ссылки на папку");
 
   const files = [];
   for (let i = 0; i < sources.length; i++) files.push(...(await collect(sources[i], i + 1)));
   console.log(`На диске в «ПРИНЯТО К РЕЛИЗУ» найдено видео: ${files.length}`);
+  const before = files.length;
+  for (let i = 0; i < allSources.length; i++) files.push(...(await collect(allSources[i], `all${i + 1}`, true)));
+  if (allSources.length) console.log(`В папках, где берётся всё, найдено видео: ${files.length - before}`);
 
   if (noDb) console.log("База не подключена: сравниваю с пустой таблицей.");
   const rows = noDb ? [] : await db("GET", "shorts?select=id,author,file,disk_path&limit=5000");
@@ -106,7 +112,7 @@ async function main() {
   const link = [], add = [];
   for (const f of files) {
     if (known.has(f.key)) continue;
-    const i = free.findIndex((r) => (norm(r.file) === norm(f.file) || norm(r.file) === norm(f.folder)) && (!r.author || !f.author || r.author === f.author));
+    const i = free.findIndex((r) => (norm(r.file) === norm(f.file) || (f.folder && norm(r.file) === norm(f.folder))) && (!r.author || !f.author || r.author === f.author));
     if (i >= 0) link.push({ id: free.splice(i, 1)[0].id, f });
     else add.push(f);
     known.add(f.key);
