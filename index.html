@@ -345,34 +345,48 @@ async function diskList(key,path){
     if(!r||!r.ok){const e=new Error("disk");e.disk=true;throw e}
     const page=((await r.json())._embedded||{}).items||[];items.push(...page);if(page.length<200)break}
   return items}
-async function diskCollect(src,n){
+async function diskCollect(src,n,all){
   const found=[];
   async function walk(path,depth,inside){
     for(const it of await diskList(src.url,path)){
       if(it.type==="dir"){if(depth<6)await walk(it.path,depth+1,inside||isReleaseDir(it.name))}
       else if(inside&&(it.media_type==="video"||VIDEO_EXT.test(it.name)))
-        found.push({key:n+":"+it.path,file:it.name.replace(/\.[^.]+$/,""),folder:path.split("/").pop().replace(/^\d+\.\s*/,""),
+        found.push({key:n+":"+it.path,file:it.name.replace(/\.[^.]+$/,""),folder:all?"":path.split("/").pop().replace(/^\d+\.\s*/,""),
           author:authorOf(it.path,src.author),added:String(it.created||it.modified||"").slice(0,10)||today()})}}
-  await walk("/",0,false);return found}
+  await walk("/",0,!!all);return found}
+// Строки, чьих файлов на диске больше нет. Предохранитель: если в папке пропало больше половины
+// роликов (и больше пяти) - похоже на сбой или смену ссылки, такие строки не трогаем.
+function diskGone(rows,present,scanned){
+  const pre=k=>k.slice(0,k.indexOf(":")),gone=[];
+  for(const p of scanned){
+    const mine=rows.filter(r=>r.disk_path&&!r.deleted&&pre(r.disk_path)===p),miss=mine.filter(r=>!present.has(r.disk_path));
+    if(miss.length>5&&miss.length>mine.length/2)continue;
+    gone.push(...miss)}
+  return gone}
+const parseSources=v=>String(v||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+  const i=l.indexOf("=",l.indexOf("://")+3);return i>0?{url:l.slice(0,i).trim(),author:l.slice(i+1).trim()}:{url:l,author:""}});
 async function syncDisk(){
   if(!S.canWrite||syncDisk.on)return;syncDisk.on=true;$("sync").disabled=true;
   try{
     banner("Смотрю папки на Яндекс Диске, это займёт до минуты...","info");
-    const st=await API.req("GET","settings?key=eq.yadisk_sources&select=value");
-    const sources=String((st&&st[0]&&st[0].value)||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
-      const i=l.indexOf("=",l.indexOf("://")+3);return i>0?{url:l.slice(0,i).trim(),author:l.slice(i+1).trim()}:{url:l,author:""}});
-    if(!sources.length){banner("Не задана ссылка на Яндекс Диск, синхронизировать не с чем.","warn");return}
+    const st=await API.req("GET","settings?key=in.(yadisk_sources,yadisk_all_sources)&select=key,value");
+    const setting=k=>((st||[]).find(x=>x.key===k)||{}).value;
+    const sources=parseSources(setting("yadisk_sources")),allSources=parseSources(setting("yadisk_all_sources")); // из вторых берутся все видео
+    if(!sources.length&&!allSources.length){banner("Не задана ссылка на Яндекс Диск, синхронизировать не с чем.","warn");return}
     const files=[];for(let i=0;i<sources.length;i++)files.push(...await diskCollect(sources[i],i+1));
-    const rows=await API.req("GET","shorts?select=id,author,file,disk_path&limit=5000");
+    for(let i=0;i<allSources.length;i++)files.push(...await diskCollect(allSources[i],"all"+(i+1),true));
+    const rows=await API.req("GET","shorts?select=id,author,file,disk_path,deleted&limit=5000");
+    const gone=diskGone(rows,new Set(files.map(f=>f.key)),[...sources.map((_,i)=>String(i+1)),...allSources.map((_,i)=>"all"+(i+1))]);
     const known=new Set(rows.map(r=>r.disk_path).filter(Boolean)),free=rows.filter(r=>!r.disk_path),link=[],add=[];
     for(const f of files){
       if(known.has(f.key))continue;known.add(f.key);
-      const i=free.findIndex(r=>(norm(r.file)===norm(f.file)||norm(r.file)===norm(f.folder))&&(!r.author||!f.author||r.author===f.author));
+      const i=free.findIndex(r=>(norm(r.file)===norm(f.file)||(f.folder&&norm(r.file)===norm(f.folder)))&&(!r.author||!f.author||r.author===f.author));
       if(i>=0)link.push({id:free.splice(i,1)[0].id,key:f.key});else add.push(f)}
     for(const l of link)await API.req("PATCH","shorts?id=eq."+l.id,{disk_path:l.key});
     if(add.length){const now=Date.now();await API.req("POST","shorts",add.map((f,i)=>({author:f.author,file:f.file,added:f.added,ord:now+i,disk_path:f.key})))}
+    for(const r of gone)await API.req("PATCH","shorts?id=eq."+r.id,{deleted:true});
     banner("");await load();
-    toast(add.length?"Добавлено с диска: "+add.length:"Новых роликов на диске нет")}
+    toast((add.length?"Добавлено с диска: "+add.length:"Новых роликов на диске нет")+(gone.length?". Убрано пропавших с диска: "+gone.length:""))}
   catch(e){
     if(e&&e.login){banner("");fail(e)}
     else banner(e&&e.disk?"Яндекс Диск не ответил. Попробуй ещё раз через минуту.":"Синхронизация не удалась: нет связи с базой. Попробуй ещё раз.","warn")}
