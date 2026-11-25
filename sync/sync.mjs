@@ -2,6 +2,8 @@
 // которые лежат в каталоге «ПРИНЯТО К РЕЛИЗУ» и которых в таблице ещё нет.
 // Если ролик с диска исчез (удалили или перенесли), его строка скрывается из таблицы -
 // так же, как кнопкой «Удалить» на сайте. Заполненные поля не меняет, файлы на диске не трогает.
+// Если рядом с роликом лежит текстовый файл с тем же именем (ролик.mp4 + ролик.txt), из него
+// берутся название, описание и заметка - но только в пустые поля строки.
 //
 // Переменные окружения:
 //   SUPABASE_URL          адрес проекта
@@ -41,8 +43,14 @@ async function listDir(publicKey, path) {
     u.searchParams.set("path", path);
     u.searchParams.set("limit", "200");
     u.searchParams.set("offset", String(offset));
-    const r = await fetch(u);
-    if (!r.ok) throw new Error(`Яндекс Диск ответил ${r.status} на папку ${path}`);
+    // Диск иногда отвечает 500 или 429 на ровном месте - пробуем до трёх раз.
+    let r;
+    for (let attempt = 1; ; attempt++) {
+      r = await fetch(u).catch(() => null);
+      if (r && r.ok) break;
+      if (attempt >= 3 || (r && r.status < 500 && r.status !== 429)) throw new Error(`Яндекс Диск ответил ${r ? r.status : "обрывом связи"} на папку ${path}`);
+      await new Promise((res) => setTimeout(res, 3000 * attempt));
+    }
     const j = await r.json();
     const page = (j._embedded && j._embedded.items) || [];
     items.push(...page);
@@ -60,10 +68,60 @@ function authorOf(path, fallback) {
   return "";
 }
 
+// Текстовый файл рядом с роликом. С подписями «Название: / Описание: / Заметка:»
+// или без них: тогда первая строка - название, остальное - описание.
+function parseMeta(text) {
+  const meta = { title: "", descr: "", note: "" };
+  const keys = { "название": "title", "описание": "descr", "заметка": "note" };
+  const lines = String(text || "").replace(/^﻿/, "").split(/\r?\n/).map((l) => l.trimEnd());
+  if (!lines.some((l) => l.trim())) return null;
+  if (!lines.some((l) => /^\s*(название|описание|заметка)\s*:/i.test(l))) {
+    const i = lines.findIndex((l) => l.trim());
+    meta.title = lines[i].trim();
+    meta.descr = lines.slice(i + 1).join("\n").trim();
+    return meta;
+  }
+  let cur = null;
+  for (const l of lines) {
+    const m = l.match(/^\s*(название|описание|заметка)\s*:\s*(.*)$/i);
+    if (m) { cur = keys[m[1].toLowerCase()]; meta[cur] = m[2]; }
+    else if (cur) meta[cur] += "\n" + l;
+  }
+  for (const k of Object.keys(meta)) meta[k] = meta[k].trim();
+  return meta;
+}
+
+async function readMeta(f) {
+  if (!f.txt || f.txt.size > 200000) return null;
+  try {
+    let href = f.txt.file;
+    if (!href) {
+      const u = new URL((process.env.YADISK_API || "https://cloud-api.yandex.net/v1/disk/public/resources") + "/download");
+      u.searchParams.set("public_key", f.src);
+      u.searchParams.set("path", f.txt.path);
+      href = (await (await fetch(u)).json()).href;
+    }
+    const r = await fetch(href);
+    if (!r.ok) throw new Error(`код ${r.status}`);
+    return parseMeta(await r.text());
+  } catch (e) {
+    console.log(`  не смог прочитать текстовый файл к «${f.file}»: ${e.message}`);
+    return null;
+  }
+}
+// Что из текстового файла можно дописать в строку: только в пустые поля.
+function fillEmpty(row, meta) {
+  const patch = {};
+  for (const k of ["title", "descr", "note"]) if (meta && meta[k] && !String(row[k] || "").trim()) patch[k] = meta[k];
+  return patch;
+}
+
 async function collect(source, n, all = false) {
   const found = [];
   async function walk(path, depth, inside) {
-    for (const it of await listDir(source.url, path)) {
+    const items = await listDir(source.url, path);
+    const texts = new Map(items.filter((it) => it.type === "file" && /\.txt$/i.test(it.name)).map((it) => [norm(stem(it.name)), it]));
+    for (const it of items) {
       if (it.type === "dir") {
         const here = inside || isReleaseDir(it.name);
         if (depth < MAX_DEPTH) await walk(it.path, depth + 1, here);
@@ -74,6 +132,8 @@ async function collect(source, n, all = false) {
           folder: all ? "" : path.split("/").pop().replace(/^\d+\.\s*/, ""), // «3. Улун» -> «Улун»
           author: authorOf(it.path, source.author),
           added: String(it.created || it.modified || new Date().toISOString()).slice(0, 10),
+          txt: texts.get(norm(stem(it.name))) || null,
+          src: source.url,
         });
       }
     }
@@ -124,32 +184,45 @@ async function main() {
   if (allSources.length) console.log(`В папках, где берётся всё, найдено видео: ${files.length - before}`);
 
   if (noDb) console.log("База не подключена: сравниваю с пустой таблицей.");
-  const rows = noDb ? [] : await db("GET", "shorts?select=id,author,file,disk_path,deleted&limit=5000");
+  const rows = noDb ? [] : await db("GET", "shorts?select=id,author,file,disk_path,deleted,title,descr,note&limit=5000");
   const scanned = [...sources.map((_, i) => String(i + 1)), ...allSources.map((_, i) => `all${i + 1}`)];
   const gone = findGone(rows, new Set(files.map((f) => f.key)), scanned);
   const known = new Set(rows.map((r) => r.disk_path).filter(Boolean));
   const free = rows.filter((r) => !r.disk_path); // строки, заведённые руками или из старой таблицы
 
-  const link = [], add = [];
+  const byPath = new Map(rows.filter((r) => r.disk_path).map((r) => [r.disk_path, r]));
+  const link = [], add = [], fill = [];
   for (const f of files) {
-    if (known.has(f.key)) continue;
+    if (known.has(f.key)) {
+      // Строка уже есть: если у неё пустые поля, а рядом с роликом лежит текст - дописываем.
+      const row = byPath.get(f.key);
+      if (row && !row.deleted && f.txt && ["title", "descr"].some((k) => !String(row[k] || "").trim())) {
+        const patch = fillEmpty(row, await readMeta(f));
+        if (Object.keys(patch).length) fill.push({ id: row.id, f, patch });
+      }
+      continue;
+    }
     const i = free.findIndex((r) => (norm(r.file) === norm(f.file) || (f.folder && norm(r.file) === norm(f.folder))) && (!r.author || !f.author || r.author === f.author));
-    if (i >= 0) link.push({ id: free.splice(i, 1)[0].id, f });
-    else add.push(f);
+    const meta = f.txt ? await readMeta(f) : null;
+    if (i >= 0) { const row = free.splice(i, 1)[0]; link.push({ id: row.id, f, patch: fillEmpty(row, meta) }); }
+    else add.push({ ...f, meta: meta || {} });
     known.add(f.key);
   }
 
   console.log(`Уже в таблице, привязываю к файлу: ${link.length}`);
   console.log(`Новых роликов: ${add.length}`);
-  for (const f of add) console.log(`  + ${f.author || "автор не определён"} / ${f.file}`);
+  for (const f of add) console.log(`  + ${f.author || "автор не определён"} / ${f.file}${f.meta.title ? ` - «${f.meta.title}»` : ""}`);
+  console.log(`Дописываю название и описание из текстовых файлов: ${fill.length}`);
+  for (const x of fill) console.log(`  ~ ${x.f.author || "автор не определён"} / ${x.f.file}: ${Object.keys(x.patch).join(", ")}`);
   console.log(`Пропали с диска, скрываю из таблицы: ${gone.length}`);
   for (const r of gone) console.log(`  - ${r.author || "автор не определён"} / ${r.file}`);
   if (DRY) { console.log("Пробный запуск: в базу ничего не записано."); return; }
 
-  for (const { id, f } of link) await db("PATCH", `shorts?id=eq.${id}`, { disk_path: f.key }, "return=minimal");
+  for (const { id, f, patch } of link) await db("PATCH", `shorts?id=eq.${id}`, { disk_path: f.key, ...patch }, "return=minimal");
+  for (const { id, patch } of fill) await db("PATCH", `shorts?id=eq.${id}`, patch, "return=minimal");
   if (add.length) {
     const now = Date.now();
-    await db("POST", "shorts", add.map((f, i) => ({ author: f.author, file: f.file, added: f.added, ord: now + i, disk_path: f.key })), "return=minimal");
+    await db("POST", "shorts", add.map((f, i) => ({ author: f.author, file: f.file, added: f.added, ord: now + i, disk_path: f.key, title: f.meta.title || "", descr: f.meta.descr || "", note: f.meta.note || "" })), "return=minimal");
   }
   for (const r of gone) await db("PATCH", `shorts?id=eq.${r.id}`, { deleted: true }, "return=minimal");
   console.log("Готово.");
