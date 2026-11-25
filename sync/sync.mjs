@@ -12,6 +12,8 @@
 //                         Можно указать автора: "https://disk.yandex.ru/d/xxxx = Лера"
 //   YADISK_ALL_SOURCES    то же, но из этих папок берутся ВСЕ видео, без каталога
 //                         «Принято к релизу» (папка, куда ролики кладёт телеграм-бот)
+//                         Если обе переменные со ссылками не заданы, ссылки берутся из таблицы
+//                         settings (yadisk_sources, yadisk_all_sources) - те же, что у кнопки на сайте.
 //   DRY_RUN=1             только показать, что было бы сделано
 
 const AUTHORS = ["Леша", "Миша", "Саша", "Лера", "Алекс", "Ратибор", "Даня"];
@@ -170,10 +172,17 @@ async function db(method, path, body, prefer) {
 }
 
 async function main() {
-  const sources = parseSources(YADISK_SOURCES);
   const noDb = !SUPABASE_URL || !SUPABASE_SERVICE_KEY;
   if (noDb && !DRY) throw new Error("Не заданы SUPABASE_URL и SUPABASE_SERVICE_KEY");
-  const allSources = parseSources(YADISK_ALL_SOURCES);
+  let srcText = YADISK_SOURCES, allText = YADISK_ALL_SOURCES;
+  if (!noDb && !srcText && !allText) {
+    const st = await db("GET", "settings?select=key,value");
+    const setting = (k) => (st.find((x) => x.key === k) || {}).value || "";
+    srcText = setting("yadisk_sources");
+    allText = setting("yadisk_all_sources");
+  }
+  const sources = parseSources(srcText);
+  const allSources = parseSources(allText);
   if (!sources.length && !allSources.length) throw new Error("Не задан YADISK_SOURCES - нет ни одной ссылки на папку");
 
   const files = [];
