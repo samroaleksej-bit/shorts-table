@@ -376,12 +376,13 @@ async function diskCollect(src,n,all){
   async function walk(path,depth,inside){
     const items=await diskList(src.url,path);
     const texts=new Map(items.filter(it=>it.type==="file"&&/\.txt$/i.test(it.name)).map(it=>[norm(it.name.replace(/\.[^.]+$/,"")),it]));
+    const images=new Set(items.filter(it=>it.type==="file"&&/\.(jpe?g|png|webp)$/i.test(it.name)).map(it=>norm(it.name.replace(/\.[^.]+$/,"")))); // картинка с именем ролика - его превью
     for(const it of items){
       if(it.type==="dir"){if(depth<6)await walk(it.path,depth+1,inside||isReleaseDir(it.name))}
       else if(inside&&(it.media_type==="video"||VIDEO_EXT.test(it.name)))
         found.push({key:n+":"+it.path,file:it.name.replace(/\.[^.]+$/,""),folder:all?"":path.split("/").pop().replace(/^\d+\.\s*/,""),
           author:authorOf(it.path,src.author),added:String(it.created||it.modified||"").slice(0,10)||today(),
-          txt:texts.get(norm(it.name.replace(/\.[^.]+$/,"")))||null})}}
+          txt:texts.get(norm(it.name.replace(/\.[^.]+$/,"")))||null,img:images.has(norm(it.name.replace(/\.[^.]+$/,"")))})}}
   await walk("/",0,!!all);return found}
 // Строки, чьих файлов на диске больше нет. Предохранитель: если в папке пропало больше половины
 // роликов (и больше пяти) - похоже на сбой или смену ссылки, такие строки не трогаем.
@@ -404,22 +405,24 @@ async function syncDisk(){
     if(!sources.length&&!allSources.length){banner("Не задана ссылка на Яндекс Диск, синхронизировать не с чем.","warn");return}
     const files=[];for(let i=0;i<sources.length;i++)files.push(...await diskCollect(sources[i],i+1));
     for(let i=0;i<allSources.length;i++)files.push(...await diskCollect(allSources[i],"all"+(i+1),true));
-    const rows=await API.req("GET","shorts?select=id,author,file,disk_path,deleted,title,descr,note&limit=5000");
+    const rows=await API.req("GET","shorts?select=id,author,file,disk_path,deleted,title,descr,note,preview_ready&limit=5000");
     const gone=diskGone(rows,new Set(files.map(f=>f.key)),[...sources.map((_,i)=>String(i+1)),...allSources.map((_,i)=>"all"+(i+1))]);
     const known=new Set(rows.map(r=>r.disk_path).filter(Boolean)),free=rows.filter(r=>!r.disk_path),link=[],add=[];
     const byPath=new Map(rows.filter(r=>r.disk_path).map(r=>[r.disk_path,r])),fill=[];
     for(const f of files){
       if(known.has(f.key)){
         const row=byPath.get(f.key);
-        if(row&&!row.deleted&&f.txt&&["title","descr"].some(k=>!String(row[k]||"").trim())){
-          const p=fillEmpty(row,await readMeta(f));if(Object.keys(p).length)fill.push({id:row.id,p})}
+        if(row&&!row.deleted){
+          const p=f.txt&&["title","descr"].some(k=>!String(row[k]||"").trim())?fillEmpty(row,await readMeta(f)):{};
+          if(f.img&&!row.preview_ready)p.preview_ready=true;
+          if(Object.keys(p).length)fill.push({id:row.id,p})}
         continue}
       known.add(f.key);const meta=f.txt?await readMeta(f):null;
       const i=free.findIndex(r=>(norm(r.file)===norm(f.file)||(f.folder&&norm(r.file)===norm(f.folder)))&&(!r.author||!f.author||r.author===f.author));
-      if(i>=0){const row=free.splice(i,1)[0];link.push({id:row.id,key:f.key,p:fillEmpty(row,meta)})}else add.push({...f,meta:meta||{}})}
+      if(i>=0){const row=free.splice(i,1)[0];link.push({id:row.id,key:f.key,p:{...fillEmpty(row,meta),...(f.img&&!row.preview_ready?{preview_ready:true}:{})}})}else add.push({...f,meta:meta||{}})}
     for(const l of link)await API.req("PATCH","shorts?id=eq."+l.id,{disk_path:l.key,...l.p});
     for(const x of fill)await API.req("PATCH","shorts?id=eq."+x.id,x.p);
-    if(add.length){const now=Date.now();await API.req("POST","shorts",add.map((f,i)=>({author:f.author,file:f.file,added:f.added,ord:now+i,disk_path:f.key,title:f.meta.title||"",descr:f.meta.descr||"",note:f.meta.note||""})))}
+    if(add.length){const now=Date.now();await API.req("POST","shorts",add.map((f,i)=>({author:f.author,file:f.file,added:f.added,ord:now+i,disk_path:f.key,title:f.meta.title||"",descr:f.meta.descr||"",note:f.meta.note||"",preview_ready:!!f.img})))}
     for(const r of gone)await API.req("PATCH","shorts?id=eq."+r.id,{deleted:true});
     banner("");await load();
     toast((add.length?"Добавлено с диска: "+add.length:"Новых роликов на диске нет")+(gone.length?". Убрано пропавших с диска: "+gone.length:""))}

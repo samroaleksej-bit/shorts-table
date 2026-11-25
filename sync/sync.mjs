@@ -4,6 +4,8 @@
 // так же, как кнопкой «Удалить» на сайте. Заполненные поля не меняет, файлы на диске не трогает.
 // Если рядом с роликом лежит текстовый файл с тем же именем (ролик.mp4 + ролик.txt), из него
 // берутся название, описание и заметка - но только в пустые поля строки.
+// Если рядом лежит картинка с тем же именем (ролик.jpg / .png / .webp), это превью:
+// у строки ставится «Превью готово».
 //
 // Переменные окружения:
 //   SUPABASE_URL          адрес проекта
@@ -123,6 +125,7 @@ async function collect(source, n, all = false) {
   async function walk(path, depth, inside) {
     const items = await listDir(source.url, path);
     const texts = new Map(items.filter((it) => it.type === "file" && /\.txt$/i.test(it.name)).map((it) => [norm(stem(it.name)), it]));
+    const images = new Set(items.filter((it) => it.type === "file" && /\.(jpe?g|png|webp)$/i.test(it.name)).map((it) => norm(stem(it.name))));
     for (const it of items) {
       if (it.type === "dir") {
         const here = inside || isReleaseDir(it.name);
@@ -135,6 +138,7 @@ async function collect(source, n, all = false) {
           author: authorOf(it.path, source.author),
           added: String(it.created || it.modified || new Date().toISOString()).slice(0, 10),
           txt: texts.get(norm(stem(it.name))) || null,
+          img: images.has(norm(stem(it.name))),
           src: source.url,
         });
       }
@@ -193,7 +197,7 @@ async function main() {
   if (allSources.length) console.log(`В папках, где берётся всё, найдено видео: ${files.length - before}`);
 
   if (noDb) console.log("База не подключена: сравниваю с пустой таблицей.");
-  const rows = noDb ? [] : await db("GET", "shorts?select=id,author,file,disk_path,deleted,title,descr,note&limit=5000");
+  const rows = noDb ? [] : await db("GET", "shorts?select=id,author,file,disk_path,deleted,title,descr,note,preview_ready&limit=5000");
   const scanned = [...sources.map((_, i) => String(i + 1)), ...allSources.map((_, i) => `all${i + 1}`)];
   const gone = findGone(rows, new Set(files.map((f) => f.key)), scanned);
   const known = new Set(rows.map((r) => r.disk_path).filter(Boolean));
@@ -205,15 +209,16 @@ async function main() {
     if (known.has(f.key)) {
       // Строка уже есть: если у неё пустые поля, а рядом с роликом лежит текст - дописываем.
       const row = byPath.get(f.key);
-      if (row && !row.deleted && f.txt && ["title", "descr"].some((k) => !String(row[k] || "").trim())) {
-        const patch = fillEmpty(row, await readMeta(f));
+      if (row && !row.deleted) {
+        const patch = f.txt && ["title", "descr"].some((k) => !String(row[k] || "").trim()) ? fillEmpty(row, await readMeta(f)) : {};
+        if (f.img && !row.preview_ready) patch.preview_ready = true;
         if (Object.keys(patch).length) fill.push({ id: row.id, f, patch });
       }
       continue;
     }
     const i = free.findIndex((r) => (norm(r.file) === norm(f.file) || (f.folder && norm(r.file) === norm(f.folder))) && (!r.author || !f.author || r.author === f.author));
     const meta = f.txt ? await readMeta(f) : null;
-    if (i >= 0) { const row = free.splice(i, 1)[0]; link.push({ id: row.id, f, patch: fillEmpty(row, meta) }); }
+    if (i >= 0) { const row = free.splice(i, 1)[0]; link.push({ id: row.id, f, patch: { ...fillEmpty(row, meta), ...(f.img && !row.preview_ready ? { preview_ready: true } : {}) } }); }
     else add.push({ ...f, meta: meta || {} });
     known.add(f.key);
   }
@@ -221,7 +226,7 @@ async function main() {
   console.log(`Уже в таблице, привязываю к файлу: ${link.length}`);
   console.log(`Новых роликов: ${add.length}`);
   for (const f of add) console.log(`  + ${f.author || "автор не определён"} / ${f.file}${f.meta.title ? ` - «${f.meta.title}»` : ""}`);
-  console.log(`Дописываю название и описание из текстовых файлов: ${fill.length}`);
+  console.log(`Дописываю из файлов рядом с роликом (название, описание, превью): ${fill.length}`);
   for (const x of fill) console.log(`  ~ ${x.f.author || "автор не определён"} / ${x.f.file}: ${Object.keys(x.patch).join(", ")}`);
   console.log(`Пропали с диска, скрываю из таблицы: ${gone.length}`);
   for (const r of gone) console.log(`  - ${r.author || "автор не определён"} / ${r.file}`);
@@ -231,7 +236,7 @@ async function main() {
   for (const { id, patch } of fill) await db("PATCH", `shorts?id=eq.${id}`, patch, "return=minimal");
   if (add.length) {
     const now = Date.now();
-    await db("POST", "shorts", add.map((f, i) => ({ author: f.author, file: f.file, added: f.added, ord: now + i, disk_path: f.key, title: f.meta.title || "", descr: f.meta.descr || "", note: f.meta.note || "" })), "return=minimal");
+    await db("POST", "shorts", add.map((f, i) => ({ author: f.author, file: f.file, added: f.added, ord: now + i, disk_path: f.key, title: f.meta.title || "", descr: f.meta.descr || "", note: f.meta.note || "", preview_ready: !!f.img })), "return=minimal");
   }
   for (const r of gone) await db("PATCH", `shorts?id=eq.${r.id}`, { deleted: true }, "return=minimal");
   console.log("Готово.");
