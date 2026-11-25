@@ -57,6 +57,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .list{display:flex;flex-direction:column;gap:8px}
 .row{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:start}
 .row.s-wait{border-left-color:var(--warn)} .row.s-plan{border-left-color:var(--info)} .row.s-out{border-left-color:var(--ok)}
+.row .main{cursor:pointer;border-radius:8px;margin:-4px -6px;padding:4px 6px;min-width:0}
+.row .main:hover,.row .main:focus-visible{background:color-mix(in srgb,var(--line) 45%,transparent);outline:none}
+.row .main:hover h3,.row .main:focus-visible h3{text-decoration:underline;text-underline-offset:3px}
 .row h3{margin:0;font:600 16px/1.3 var(--body);overflow-wrap:anywhere}
 .row h3.empty{color:var(--muted);font-weight:400;font-style:italic}
 .meta{display:flex;flex-wrap:wrap;gap:6px 12px;color:var(--muted);font-size:13px;margin-top:4px}
@@ -132,7 +135,7 @@ form.ed h2{margin:0;font:700 18px/1.2 var(--display)}
         <li><b>Превью.</b> Сделать превью (необязательно). Если его не будет, сделает монтажёр Саша.</li>
         <li><b>Встраивание.</b> Добавить превью в самое начало ролика, длительность 0,01 секунды. Если превью делал Саша, он встроит сам.</li>
         <li><b>Загрузка.</b> Готовый ролик обязательно загрузить в свою папку на Яндекс Диске, каталог «Принято к релизу» (или «Принят»).</li>
-        <li><b>Запись сюда.</b> Нажать «Синхронизировать с диском»: ролик появится в таблице. Открыть его строку и заполнить название и описание.</li>
+        <li><b>Запись сюда.</b> Нажать «Синхронизировать с диском»: ролик появится в таблице. Нажать на ролик и заполнить название и описание.</li>
         <li><b>Релиз.</b> Когда ролик выложен, нажать «Выложил» в его строке: дата релиза поставится сегодняшняя.</li>
       </ol>
     </details>
@@ -146,7 +149,7 @@ form.ed h2{margin:0;font:700 18px/1.2 var(--display)}
       <div class="f"><label for="fAuthor">Автор</label><select id="fAuthor"></select></div>
       <div class="f"><label for="fFile">Название файла на Яндекс Диске</label><input id="fFile" autocomplete="off"></div>
     </div>
-    <div class="f"><label for="fTitle">Название для соцсетей <button class="btn small" type="button" data-copy="fTitle">Копировать</button></label><input id="fTitle" autocomplete="off"></div>
+    <div class="f"><label for="fTitle">Название ролика (для соцсетей) <button class="btn small" type="button" data-copy="fTitle">Копировать</button></label><input id="fTitle" autocomplete="off"></div>
     <div class="f"><label for="fDesc">Описание <button class="btn small" type="button" data-copy="fDesc">Копировать</button></label><textarea id="fDesc"></textarea></div>
     <div class="checks">
       <label><input type="checkbox" id="fReady"> Превью готово</label>
@@ -253,7 +256,11 @@ function render(){
   rows.forEach(r=>list.append(rowEl(r)));
 }
 function rowEl(r){
-  const st=status(r),row=el("article","row s-"+st),main=el("div"),side=el("div","side");
+  const st=status(r),row=el("article","row s-"+st),main=el("div","main"),side=el("div","side");
+  // Нажатие на сам ролик открывает окно правки: название, описание и остальное.
+  main.tabIndex=0;main.setAttribute("role","button");main.title="Нажми, чтобы изменить название и описание";
+  main.onclick=()=>{if(String(window.getSelection&&window.getSelection()||""))return;openDlg(r,true)};
+  main.onkeydown=(e)=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openDlg(r,true)}};
   main.append(el("h3",r.title?null:"empty",r.title||"Без названия"));
   const meta=el("div","meta");
   if(S.author==="Все")meta.append(el("span",null,r.author||"автор не указан"));
@@ -270,7 +277,7 @@ function rowEl(r){
     pub.title="Отметить, что ролик выложен сегодня";pub.onclick=()=>publish(r);acts.append(pub)}
   const c1=el("button","btn small","Название");c1.type="button";c1.title="Скопировать название";c1.onclick=()=>copy(r.title,"Название скопировано");
   const c2=el("button","btn small","Описание");c2.type="button";c2.title="Скопировать описание";c2.onclick=()=>copy(r.desc,"Описание скопировано");
-  const ed=el("button","btn small","Открыть");ed.type="button";ed.onclick=()=>openDlg(r);
+  const ed=el("button","btn small","Изменить");ed.type="button";ed.title="Изменить название, описание и остальное";ed.onclick=()=>openDlg(r,true);
   if(r.title)acts.append(c1);if(r.desc)acts.append(c2);acts.append(ed);
   side.append(pills,acts);row.append(main,side);return row}
 function toggle(r,field,on,off){
@@ -283,13 +290,14 @@ async function copy(text,msg){try{await navigator.clipboard.writeText(text||"");
 function saveUi(){try{localStorage.setItem("shorts-ui",JSON.stringify({author:S.author,sort:S.sort}))}catch(e){}}
 
 /* ---- окно правки ---- */
-function openDlg(r){
+function openDlg(r,focusTitle){
   S.editing=r?r.id:null;$("dlgTitle").textContent=r?"Ролик":"Новый ролик";
   $("fAuthor").value=r?r.author:(S.author==="Все"?AUTHORS[0]:S.author);
   $("fFile").value=r?r.file:"";$("fTitle").value=r?r.title:"";$("fDesc").value=r?r.desc:"";
   $("fReady").checked=r?!!r.previewReady:false;$("fEmb").checked=r?!!r.previewEmbedded:false;
   $("fAdded").value=r?r.added:today();$("fRelease").value=r?r.release:"";$("fNote").value=r?r.note:"";
-  $("del").hidden=!r||!S.canWrite;$("delYes").hidden=true;$("save").disabled=!S.canWrite;$("dlg").showModal()}
+  $("del").hidden=!r||!S.canWrite;$("delYes").hidden=true;$("save").disabled=!S.canWrite;$("dlg").showModal();
+  if(focusTitle){const t=$("fTitle");t.focus();t.select()}}
 $("sync").onclick=()=>syncDisk();
 $("cancel").onclick=()=>$("dlg").close();
 $("del").onclick=()=>{$("delYes").hidden=false};
